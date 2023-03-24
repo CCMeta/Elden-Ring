@@ -16,6 +16,7 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupActionBarWithNavController
@@ -166,10 +167,10 @@ class MainActivity : AppCompatActivity() {
 //                mLeDeviceListAdapter!!.addDevice(result.device!!)
 //                mLeDeviceListAdapter!!.notifyDataSetChanged()
 
-                Log.wtf("[CCMETA] ScanResult ", "$result")
-                Log.wtf("[CCMETA] device.address ", device.address)
+//                Log.wtf("[CCMETA] ScanResult ", "$result")
+//                Log.wtf("[CCMETA] device.address ", device.address)
+//                Log.wtf("[CCMETA] device.name", device.name)
                 if (TARGET_MAC != result.device.address) return
-                Log.wtf("[CCMETA] device.name", device.name)
                 if (!result.isConnectable) {
                     Log.wtf("[CCMETA] isConnectable", result.isConnectable.toString())
                     return
@@ -200,7 +201,7 @@ class MainActivity : AppCompatActivity() {
                             Log.wtf(
                                 "[CCMETA] newState", newState.toString()
                             )
-                            GlobalScope.launch {
+                            lifecycleScope.launch {
                                 withContext(Dispatchers.Main) {
                                     HomeViewModel.shit(gatt.device.address, newState)
                                 }
