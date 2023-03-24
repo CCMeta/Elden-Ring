@@ -9,6 +9,7 @@ import android.bluetooth.le.ScanResult
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -25,7 +26,6 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.sagereal.elderring.databinding.ActivityMainBinding
 import com.sagereal.elderring.ui.home.HomeViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.*
@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var bluetoothManager: BluetoothManager
+    private lateinit var bluetoothAdapter: BluetoothAdapter
     private lateinit var bluetoothLeScanner: BluetoothLeScanner
     private lateinit var context: Context
     private var bluetoothGatt: BluetoothGatt? = null
@@ -76,44 +77,61 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.BLUETOOTH_CONNECT
         )
         requestPermissions(fuck, 100)
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_ADMIN
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            cc("checkSelfPermission BLUETOOTH_SCAN failed 86")
+            return
+        }
 
         bluetoothManager = this.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        bluetoothAdapter = bluetoothManager.adapter
 
+        val registerReceiver =
+            registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_FOUND))
 
-        startBLEBT()
-//        registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_FOUND))
+        if (bluetoothAdapter.startDiscovery()) {
+//            while (bluetoothAdapter.isDiscovering) {
+//                cc(" Thread.sleep(1000)")
+//                Thread.sleep(1000)
+//            }
+        }
+
+//        startBLE()
 //        startClassicBT(bluetoothManager.adapter.getRemoteDevice(TARGET_MAC))
     }
 
     // Create a BroadcastReceiver for ACTION_FOUND.
     private val receiver = object : BroadcastReceiver() {
-
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 BluetoothDevice.ACTION_FOUND -> {
-                    val device: BluetoothDevice? =
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+//                    cc("asd")
                     if (ActivityCompat.checkSelfPermission(
                             context,
-                            Manifest.permission.BLUETOOTH_CONNECT
+                            Manifest.permission.BLUETOOTH_ADMIN
                         ) != PackageManager.PERMISSION_GRANTED
                     ) {
-                        Log.wtf("[CCMETA]permission", "86")
+                        cc("checkSelfPermission BLUETOOTH_CONNECT failed 116")
                         return
                     }
-                    val deviceHardwareAddress = device?.address // MAC address
-                    val deviceName = device?.name
-                    Log.wtf("[CCMETA]device", device.toString())
-                    Log.wtf("[CCMETA]deviceHardwareAddress", deviceHardwareAddress)
-                    Log.wtf("[CCMETA]deviceName", deviceName)
+                    val device: BluetoothDevice =
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
+                    cc(device.name)
+                    cc(device.address)
 
+                    if (device.address == "F4:4E:FC:00:00:01") {
+                        startClassicBT(device)
+                    }
                 }
             }
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    private fun startBLEBT() {
+    private fun startBLE() {
         bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
         if (ActivityCompat.checkSelfPermission(
                 this, Manifest.permission.BLUETOOTH_ADMIN
@@ -271,11 +289,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        var myUUID: UUID = UUID.fromString("00007400-0000-1000-8000-00805f9b34fb")
+//        var myUUID: UUID = UUID.fromString("00007400-0000-1000-8000-00805f9b34fb")
 
-        //        var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         var mBluetoothSocket: BluetoothSocket? = null
-        lateinit var mBluetoothAdapter: BluetoothAdapter
         var isBlueConnected: Boolean = false
         const val MESSAGE_RECEIVE_TAG = 111
         lateinit var blueAddress: String
@@ -288,34 +305,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startClassicBT(device: BluetoothDevice) {
-        //开始连接蓝牙
         thread {
-            if (mBluetoothSocket != null && isBlueConnected)
-                finish()
-
-            mBluetoothAdapter = bluetoothManager.adapter
             if (ActivityCompat.checkSelfPermission(
                     this,
                     Manifest.permission.BLUETOOTH_ADMIN
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                Log.wtf("[CCMETA]", "checkSelfPermission thread 221")
-                finish()
+                Log.wtf("[CCMETA]", "checkSelfPermission BLUETOOTH_SCAN 301")
+                return@thread
             }
-            mBluetoothAdapter.cancelDiscovery()
-            Log.wtf("[CCMETA]", "startClassicBT thread")
-            val sdk = Build.VERSION.SDK_INT
-            val mBluetoothSocket: BluetoothSocket? = if (sdk >= 10) {
-                device.createRfcommSocketToServiceRecord(myUUID)
-            } else {
-                device.createInsecureRfcommSocketToServiceRecord(myUUID)
-            }
-            Log.wtf("[CCMETA] isConnected", mBluetoothSocket?.isConnected.toString())
+            bluetoothAdapter.cancelDiscovery()
 
-            mBluetoothSocket?.connect()
+            if (mBluetoothSocket != null && isBlueConnected)
+                finish()
+
+            Log.wtf("[CCMETA]", "startClassicBT thread")
+
+            val mBluetoothSocket: BluetoothSocket by lazy(LazyThreadSafetyMode.NONE) {
+                device.createRfcommSocketToServiceRecord(myUUID)
+            }
+            Log.wtf("[CCMETA] isConnected", mBluetoothSocket.isConnected.toString())
+            if (!mBluetoothSocket.isConnected) {
+                mBluetoothSocket.use { socket -> socket.connect() }
+            }
+            val mmBuffer = ByteArray(1024)
+            while (true) {
+                if (mBluetoothSocket.inputStream.read(mmBuffer) > 0)
+                    break
+            }
+
+
             Log.wtf("[CCMETA]mBluetoothSocket", mBluetoothSocket.toString())
 
-            if (mBluetoothSocket?.isConnected == true) {
+            if (mBluetoothSocket.isConnected) {
                 Log.wtf("[CCMETA]", "mBluetoothSocket?.isConnected == true")
 
             }
@@ -325,6 +347,11 @@ class MainActivity : AppCompatActivity() {
 
 
         }
+    }
+
+    private fun cc(text: String?) {
+        Log.wtf("[CCMETA]", text)
+
     }
 
 }
