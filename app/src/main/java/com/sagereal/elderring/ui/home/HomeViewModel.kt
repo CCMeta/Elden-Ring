@@ -1,11 +1,7 @@
 package com.sagereal.elderring.ui.home
 
-import android.util.Log
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 
 object HomeViewModel : ViewModel() {
@@ -27,11 +23,20 @@ object HomeViewModel : ViewModel() {
     var textState110 = _textState110
     var textState131 = _textState131
 
-    fun shit(mac: String, state: Int) {
-        Log.wtf("[CCMETA]mac", mac)
-        Log.wtf("[CCMETA]state", "$state")
-        Log.wtf("[CCMETA]", "call shit done")
+    fun setConnectDeviceInfo(mac: String, state: String, mode: String = "BLE") {
+//        Log.wtf("[CCMETA]mac", mac)
+//        Log.wtf("[CCMETA]state", state + "MODE=" + mode)
+//        Log.wtf("[CCMETA]", "call shit done")
         textMac.postValue(textMac.value + mac)
-        textState.postValue(textState.value + state)
+        textState.postValue(textState.value + state + " | MODE=" + mode)
     }
+
+    fun setState110(text: String) {
+        textState110.postValue(textState110.value + text)
+    }
+
+    fun textState131(text: String) {
+        textState131.postValue(textState131.value + text)
+    }
+
 }

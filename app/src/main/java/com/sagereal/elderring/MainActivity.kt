@@ -92,15 +92,11 @@ class MainActivity : AppCompatActivity() {
         val registerReceiver =
             registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_FOUND))
 
-        if (bluetoothAdapter.startDiscovery()) {
-//            while (bluetoothAdapter.isDiscovering) {
-//                cc(" Thread.sleep(1000)")
-//                Thread.sleep(1000)
-//            }
-        }
+        // CLASSIC MODE
+        bluetoothAdapter.startDiscovery()
 
+        // BLE MODE
 //        startBLE()
-//        startClassicBT(bluetoothManager.adapter.getRemoteDevice(TARGET_MAC))
     }
 
     // Create a BroadcastReceiver for ACTION_FOUND.
@@ -122,7 +118,7 @@ class MainActivity : AppCompatActivity() {
                     cc(device.name)
                     cc(device.address)
 
-                    if (device.address == "F4:4E:FC:00:00:01") {
+                    if (device.address == TARGET_MAC) {
                         startClassicBT(device)
                     }
                 }
@@ -155,6 +151,7 @@ class MainActivity : AppCompatActivity() {
 //        bluetoothLeScanner.stopScan(mScanCallback) // 停止搜尋
     }
 
+    // BLE MODE CALLBACK
     private val mScanCallback = object : ScanCallback() {
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
@@ -221,7 +218,10 @@ class MainActivity : AppCompatActivity() {
                             )
                             lifecycleScope.launch {
                                 withContext(Dispatchers.Main) {
-                                    HomeViewModel.shit(gatt.device.address, newState)
+                                    HomeViewModel.setConnectDeviceInfo(
+                                        gatt.device.address,
+                                        newState.toString()
+                                    )
                                 }
                             }
                         }
@@ -288,15 +288,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    //CLASSIC MODE PROPERTIES
     companion object {
 //        var myUUID: UUID = UUID.fromString("00007400-0000-1000-8000-00805f9b34fb")
 
-        var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
         var mBluetoothSocket: BluetoothSocket? = null
         var isBlueConnected: Boolean = false
         const val MESSAGE_RECEIVE_TAG = 111
-        lateinit var blueAddress: String
-        lateinit var blueName: String
         private val BUNDLE_RECEIVE_DATA = "ReceiveData"
         private val TAG = "BlueDeviceActivity"
 
@@ -321,37 +320,79 @@ class MainActivity : AppCompatActivity() {
 
             Log.wtf("[CCMETA]", "startClassicBT thread")
 
+            val uuids = device.uuids
+            var uuidsString = ""
+            if (uuids != null) {
+                for (uuid in uuids) {
+                    cc(uuid.toString())
+                    uuidsString += "$uuid "
+                }
+            }
             val mBluetoothSocket: BluetoothSocket by lazy(LazyThreadSafetyMode.NONE) {
                 device.createRfcommSocketToServiceRecord(myUUID)
             }
             Log.wtf("[CCMETA] isConnected", mBluetoothSocket.isConnected.toString())
             if (!mBluetoothSocket.isConnected) {
-                mBluetoothSocket.use { socket -> socket.connect() }
+                cc("mBluetoothSocket.use { socket -> socket.connect() }")
+                mBluetoothSocket.use { socket ->
+                    socket.connect()
+                    if (!socket.isConnected) {
+                        cc("socket is fucked:337")
+                        return@thread
+                    }
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.Main) {
+                            HomeViewModel.setConnectDeviceInfo(
+                                device.address,
+                                socket.isConnected.toString(),
+                                mode = "CLASSIC"
+                            )
+                        }
+                    }
+                    val outputStream = mBluetoothSocket.outputStream
+                    val inputStream = mBluetoothSocket.inputStream
+                    val bufferRead = ByteArray(128)
+                    val bufferWrite = "BAD MOTHERFUCKER".toByteArray()
+                    while (socket.isConnected) {
+
+                        try {
+                            cc("Input stream was bufferRead")
+
+                            inputStream.read(bufferRead)
+
+                            cc("Input stream was readBytes")
+
+                        } catch (e: Exception) {
+                            cc("Input stream was disconnected")
+                            break
+                        }
+                        val readText = bufferRead.filter { byte -> byte.toInt() != 0x00 }
+                            .toByteArray().decodeToString()
+                        cc("socket readText = $readText")
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.Main) {
+                                HomeViewModel.setState110(readText)
+                            }
+                        }
+
+//                        try {
+//                            cc("mmOutStream.write(bytes)|" + bufferWrite.size.toString())
+//                            outputStream.write(bufferWrite)
+//                        } catch (e: Exception) {
+//                            cc(e.toString())
+//                            return@thread
+//                        }
+//
+                    }
+                    cc("SOCKET DISCONNECTED")
+                }
             }
-            val mmBuffer = ByteArray(1024)
-            while (true) {
-                if (mBluetoothSocket.inputStream.read(mmBuffer) > 0)
-                    break
-            }
-
-
-            Log.wtf("[CCMETA]mBluetoothSocket", mBluetoothSocket.toString())
-
-            if (mBluetoothSocket.isConnected) {
-                Log.wtf("[CCMETA]", "mBluetoothSocket?.isConnected == true")
-
-            }
-            while (true) {
-                Log.wtf("[CCMETA] isConnected", mBluetoothSocket?.isConnected.toString())
-            }
-
 
         }
     }
 
     private fun cc(text: String?) {
         Log.wtf("[CCMETA]", text)
-
     }
 
 }
