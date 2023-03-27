@@ -97,6 +97,8 @@ class MainActivity : AppCompatActivity() {
 
         // BLE MODE
 //        startBLE()
+
+
     }
 
     // Create a BroadcastReceiver for ACTION_FOUND.
@@ -352,26 +354,46 @@ class MainActivity : AppCompatActivity() {
                     val outputStream = mBluetoothSocket.outputStream
                     val inputStream = mBluetoothSocket.inputStream
                     val bufferRead = ByteArray(128)
-                    val bufferWrite = "BAD MOTHERFUCKER".toByteArray()
+                    val bufferWrite = "OFF".toByteArray()
+
+                    fun sendToRemote(): Boolean {
+                        return try {
+                            outputStream.write(bufferWrite)
+                            true
+                        } catch (e: Exception) {
+                            cc("Input stream was disconnected at outputStream.write")
+                            false
+                        }
+                    }
+
+
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.Main) {
+                            HomeViewModel.selectedItem.observe(this@MainActivity) { item: String ->
+                                if (item == "OFF") {
+                                    sendToRemote()
+                                    cc("sendToRemote")
+                                }
+                            }
+                        }
+                    }
+
+
+                    // while for read socket buffer from bluetooth device
                     while (socket.isConnected) {
 
                         try {
-                            cc("Input stream was bufferRead")
-
                             inputStream.read(bufferRead)
-
-                            cc("Input stream was readBytes")
-
                         } catch (e: Exception) {
-                            cc("Input stream was disconnected")
-                            break
+                            cc("Input stream was disconnected at inputStream.read")
+                            return@thread
                         }
                         val readText = bufferRead.filter { byte -> byte.toInt() != 0x00 }
                             .toByteArray().decodeToString()
                         cc("socket readText = $readText")
                         lifecycleScope.launch {
                             withContext(Dispatchers.Main) {
-                                HomeViewModel.setState110(readText)
+                                HomeViewModel.setConnectState(readText)
                             }
                         }
 

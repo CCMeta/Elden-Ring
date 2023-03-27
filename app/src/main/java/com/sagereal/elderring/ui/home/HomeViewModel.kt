@@ -1,5 +1,6 @@
 package com.sagereal.elderring.ui.home
 
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 
@@ -18,10 +19,16 @@ object HomeViewModel : ViewModel() {
     private val _textState131 = MutableLiveData<String>().apply {
         value = "STATE_131 : "
     }
+    private val mutableSelectedItem = MutableLiveData<String>()
+    val selectedItem: LiveData<String> get() = mutableSelectedItem
     var textMac = _textMac
     var textState = _textState
     var textState110 = _textState110
     var textState131 = _textState131
+
+    fun selectItem(text: String) {
+        mutableSelectedItem.value = text
+    }
 
     fun setConnectDeviceInfo(mac: String, state: String, mode: String = "BLE") {
 //        Log.wtf("[CCMETA]mac", mac)
@@ -31,12 +38,9 @@ object HomeViewModel : ViewModel() {
         textState.postValue(textState.value + state + " | MODE=" + mode)
     }
 
-    fun setState110(text: String) {
+    fun setConnectState(text: String) {
         textState110.postValue(textState110.value + text)
     }
 
-    fun textState131(text: String) {
-        textState131.postValue(textState131.value + text)
-    }
 
 }
