@@ -59,8 +59,8 @@ class HomeFragment : Fragment() {
         val homeViewModel = HomeViewModel
         Log.wtf("[CCMETA]", "onClickButtonSendOff")
         homeViewModel.selectItem("OFF")
-        binding.textState110.text = "" + homeViewModel.textState110.value + "some 110 msg"
-        binding.textState131.text = "" + homeViewModel.textState131.value + "some 131 msg"
+//        binding.textState110.text = "" + homeViewModel.textState110.value + "some 110 msg"
+//        binding.textState131.text = "" + homeViewModel.textState131.value + "some 131 msg"
     }
 
     override fun onDestroyView() {

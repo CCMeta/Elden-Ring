@@ -354,7 +354,7 @@ class MainActivity : AppCompatActivity() {
                     val outputStream = mBluetoothSocket.outputStream
                     val inputStream = mBluetoothSocket.inputStream
                     val bufferRead = ByteArray(128)
-                    val bufferWrite = "OFF".toByteArray()
+                    val bufferWrite = "OFF\n".toByteArray()
 
                     fun sendToRemote(): Boolean {
                         return try {
