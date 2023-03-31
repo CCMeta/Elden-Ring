@@ -16,6 +16,7 @@ This file is used as an example to access the private protocol of the user app
 #include "app_demo.h"
 
 #include "./../bt_manager/bt_manager_private.h"
+#include "./../bt_manager/bt_manager_private.h"
 
 #define APPDEMO_CODE
 
@@ -367,7 +368,7 @@ int app_sppble_cb(uint_t event, u8_t* data, int len)
 			print_hex("rec raw:", data, ((len<128)?len:128));
 
 		// sagereal 20230327 by ccmeta Begin
-		app_cmd_check_off_sagereal(data);
+		int ret = app_cmd_check_off_sagereal(data);
 		// sagereal 20230327 by ccmeta End
 
 		if ((p->rx_buf) && (p->left_len))
@@ -821,10 +822,11 @@ int app_cmd_check_off_sagereal(u8_t *data)
 		if (strncmp(ptr, ptr_off, strlen(ptr_off)) == 0)
 		{
 				log_debug("ccmeta INTO ptr == ptr_off");
-				sys_manager_power_off();
+				return sys_manager_power_off();
 		} else {
 				log_debug("ccmeta INTO ptr != ptr_off");
 		}
+		return 0;
 }
 
 int app_sppble_cb_sagereal(uint_t event, u8_t *data, int len)
@@ -834,7 +836,6 @@ int app_sppble_cb_sagereal(uint_t event, u8_t *data, int len)
 		int size = 0;
 		u8_t head_error = 0;
 		u8_t *ptr = data;
-		u8_t *ptr_off = {0x4f,0x46,0x46};
 		int real_len = len;
 
 		if (!p)
@@ -990,9 +991,10 @@ extern int app_cmd_send_sagereal(void)
 		// bt_manager_context_t *bt_manager = bt_manager_get_context();
 
 		app_context_t *p = app_context;
+		u8_t fuck_buf[15] = {49, 49, 48, 49, 49, 54, 48, 48, 48, 48, 48, 48, 48, 48,'\0'};
 		u8_t *normal_buf = "11011600000000";
 		u8_t *low_power_buf = "13161600000000";
-		u8_t *buf = normal_buf;
+		u8_t *buf = fuck_buf;
 
 		float battary = 2.3f;
 		if(battary <= 2.2f){
@@ -1013,5 +1015,6 @@ extern int app_cmd_send_sagereal(void)
 				log_debug("app_cmd_send_110 success");
 				return -1;
 		}
+		return 0;
 }
 // sagereal 20230327 by ccmeta End

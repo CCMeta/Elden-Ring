@@ -13,6 +13,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
@@ -32,6 +33,7 @@ import java.util.*
 import kotlin.concurrent.thread
 
 
+@Suppress("ConvertToStringTemplate")
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
@@ -40,13 +42,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothLeScanner: BluetoothLeScanner
     private lateinit var context: Context
     private var bluetoothGatt: BluetoothGatt? = null
-    val UUID_Service = UUID.randomUUID()
-    val UUID_Characteristic = UUID.randomUUID()
-    val UUID_Descriptor = UUID.randomUUID()
 
-    private val TARGET_MAC: String = "F4:4E:FC:00:00:01" // CB01
-//    private val TARGET_MAC: String = "AC:90:85:0B:77:C2" // AIRPODS
-//    private val TARGET_MAC: String = "E4:19:C1:C3:29:DD" // HONOR
+    companion object {
+        // IF MODE IS CHANGED, EDIT THIS !!!!!
+//        private var BT_MODE = "BLE"
+        private var BT_MODE = "CLASSIC"
+
+
+        // TARGET
+        private const val TARGET_MAC: String = "F4:4E:FC:00:00:01" // CB01 US301B PUBLIC
+//        private val TARGET_MAC: String = "CB:4E:FC:00:00:01" // CB01 US301B STATIC
+//        private val TARGET_MAC: String = "0C:AE:B0:AC:D9:74" // EDIFIER BLE
+//        private val TARGET_MAC: String = "AC:90:85:0B:77:C2" // AIRPODS
+//        private val TARGET_MAC: String = "BC:1D:89:11:57:B8" // MOTO X30
+
+        // BLE
+        private var scanning = false
+        private val handler = Handler()
+
+        // CLASSIC
+        var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        var mBluetoothSocket: BluetoothSocket? = null
+        var isBlueConnected: Boolean = false
+        private const val SCAN_PERIOD: Long = 6000000
+    }
 
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,57 +87,229 @@ class MainActivity : AppCompatActivity() {
         setupActionBarWithNavController(navController, appBarConfiguration)
         navView.setupWithNavController(navController)
 
-        val fuck = arrayOf(
+        val permissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH,
             Manifest.permission.BLUETOOTH_ADMIN,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.BLUETOOTH_CONNECT
+            Manifest.permission.BLUETOOTH_CONNECT,
         )
-        requestPermissions(fuck, 100)
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_ADMIN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            cc("checkSelfPermission BLUETOOTH_SCAN failed 86")
-            return
-        }
+        requestPermissions(permissions, 100)
+        checkSelfPermission()
 
         bluetoothManager = this.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
 
-        val registerReceiver =
-            registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_FOUND))
-
-        // CLASSIC MODE
-        bluetoothAdapter.startDiscovery()
-
-        // BLE MODE
-//        startBLE()
-
-
+        if (BT_MODE == "BLE") {
+            // BLE MODE
+            startBLE()
+        } else {
+            // CLASSIC MODE
+            registerReceiver(receiverBR, IntentFilter(BluetoothDevice.ACTION_FOUND))
+            bluetoothAdapter.startDiscovery()
+        }
     }
 
-    // Create a BroadcastReceiver for ACTION_FOUND.
-    private val receiver = object : BroadcastReceiver() {
+    // BLE MODE FUNCTION
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun startBLE() {
+        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
+        checkSelfPermission()
+        Log.wtf("[CCMETA]", "bluetoothLeScanner.startScan(mScanCallback)")
+
+        if (!scanning) { // Stops scanning after a pre-defined scan period.
+            handler.postDelayed({
+                scanning = false
+                bluetoothLeScanner.stopScan(leScanCallback)
+                cc("bluetoothLeScanner.stopScan(leScanCallback)")
+            }, SCAN_PERIOD)
+            scanning = true
+            bluetoothLeScanner.startScan(leScanCallback)
+        } else {
+            scanning = false
+            bluetoothLeScanner.stopScan(leScanCallback)
+        }
+
+        //clock
+        thread {
+            while (false) {
+                Thread.sleep(1000)
+                cc("System.nanoTime:" + System.nanoTime().toString())
+            }
+        }
+    }
+
+    // BLE MODE CALLBACK
+    private val leScanCallback = object : ScanCallback() {
+        override fun onScanFailed(errorCode: Int) {
+            super.onScanFailed(errorCode)
+            Log.wtf("[CCMETA]", "onScanFailed")
+        }
+
+        @RequiresApi(Build.VERSION_CODES.S)
+        override fun onScanResult(callbackType: Int, result: ScanResult?) {
+            super.onScanResult(callbackType, result)
+            checkSelfPermission()
+
+            val device = result?.device
+            if (device?.name != null && device.name.isNotEmpty()) {
+
+//                cc(device.address + "|" + device.name)
+
+                if (TARGET_MAC != device.address) return
+                if (!result.isConnectable) {
+                    Log.wtf("[CCMETA] isConnectable", result.isConnectable.toString())
+                    return
+                }
+
+                // GATT CONNECT MODE DIFF WITH CLASSIC
+                if (bluetoothGatt != null) {
+                    bluetoothGatt!!.disconnect()
+                    bluetoothGatt!!.close()
+                    bluetoothGatt = null
+                }
+
+                bluetoothGatt = device.connectGatt(context, true, object : BluetoothGattCallback() {
+
+                    override fun onConnectionStateChange(
+                        gatt: BluetoothGatt, status: Int, newState: Int
+                    ) {
+                        super.onConnectionStateChange(gatt, status, newState)
+                        cc("onConnectionStateChange status:" + status.toString())
+                        cc("onConnectionStateChange newState:" + newState.toString())
+                        checkSelfPermission()
+
+
+//                        bluetoothAdapter.getRemoteDevice(device.address)
+                        if (!gatt.discoverServices()) {
+                            cc("gatt.discoverServices is failed")
+                            return
+                        }
+
+                        // Modify UI
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.Main) {
+                                HomeViewModel.setConnectDeviceInfo(
+                                    gatt.device.address,
+                                    (newState == BluetoothProfile.STATE_CONNECTED).toString()
+                                )
+                            }
+                        }
+                    }
+
+                    override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                        cc("[CCMETA] onServicesDiscovered ")
+                        super.onServicesDiscovered(gatt, status)
+                        cc("gatt.services size " + gatt.services.size)
+                        for (i in gatt.services.indices) {
+                            cc("service No.$i :" + gatt.services[i].uuid.toString())
+                        }
+
+                        val service = gatt.getService(gatt.services[0].uuid)
+                        checkSelfPermission()
+
+                        cc("characteristics.size:" + service.characteristics.size)
+                        service.characteristics.forEach { i ->
+                            // fuck this place  properties always 20
+                            i.uuid.leastSignificantBits
+                            cc("characteristic uuid:" + i.uuid.toString())
+                            cc("characteristic properties:" + i.properties.toString())
+                            cc("characteristic permissions:" + i.permissions.toString())
+                            cc("characteristic writeType:" + i.writeType.toString())
+                            when (i.properties) {
+                                0x92 -> {
+                                    cc("gatt.readCharacteristic i.uuid:" + i.uuid.toString())
+                                    gatt.setCharacteristicNotification(i, true)
+                                    i.descriptors.forEach { descriptor ->
+                                        descriptor.value =
+                                            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                                        gatt.writeDescriptor(descriptor)
+                                    }
+                                }
+                                0x0C -> {
+                                    lifecycleScope.launch {
+                                        withContext(Dispatchers.Main) {
+                                            HomeViewModel.selectedItem.observe(this@MainActivity) { item: String ->
+                                                if (item == "OFF") {
+                                                    i.value = "OFF\n".toByteArray()
+                                                    gatt.writeCharacteristic(i)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    override fun onCharacteristicRead(
+                        gatt: BluetoothGatt?,
+                        characteristic: BluetoothGattCharacteristic?,
+                        status: Int
+                    ) {
+                        cc("onCharacteristicRead:")
+                        super.onCharacteristicRead(gatt, characteristic, status)
+                        if (status == BluetoothGatt.GATT_SUCCESS) {
+                            cc("onCharacteristicRead characteristic uuid:" + characteristic?.uuid.toString())
+                            cc("onCharacteristicRead characteristic?.value.size:" + characteristic?.value?.size)
+                            cc("onCharacteristicRead characteristic?.value:" + characteristic?.value?.decodeToString())
+                        } else {
+                            cc("status:" + status.toString())
+                        }
+                    }
+
+                    override fun onCharacteristicWrite(
+                        gatt: BluetoothGatt?,
+                        characteristic: BluetoothGattCharacteristic?,
+                        status: Int
+                    ) {
+                        cc("onCharacteristicWrite")
+                        super.onCharacteristicWrite(gatt, characteristic, status)
+                    }
+
+                    override fun onCharacteristicChanged(
+                        gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?
+                    ) {
+                        cc("onCharacteristicChanged")
+                        super.onCharacteristicChanged(gatt, characteristic)
+                        val readText = characteristic?.value?.decodeToString() ?: ""
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.Main) {
+                                HomeViewModel.setConnectState(readText)
+                            }
+                        }
+                    }
+
+                    override fun onDescriptorRead(
+                        gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int
+                    ) {
+                        super.onDescriptorRead(gatt, descriptor, status)
+                        cc("onDescriptorRead")
+                    }
+
+                    override fun onDescriptorWrite(
+                        gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int
+                    ) {
+                        cc("onDescriptorWrite ")
+                        super.onDescriptorWrite(gatt, descriptor, status)
+                    }
+
+                }, TRANSPORT_LE) // THIS IS MUST NOT AUTO, FIX THE STATUS=133 ON 230324
+                cc("bluetoothGatt?.device?.bondState:" + bluetoothGatt?.device?.bondState.toString())
+            }
+        }
+    }
+
+    // CLASSIC MODE  Create a BroadcastReceiver for ACTION_FOUND.
+    private val receiverBR = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 BluetoothDevice.ACTION_FOUND -> {
-//                    cc("asd")
-                    if (ActivityCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.BLUETOOTH_ADMIN
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        cc("checkSelfPermission BLUETOOTH_CONNECT failed 116")
-                        return
-                    }
+                    checkSelfPermission()
                     val device: BluetoothDevice =
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
-                    cc(device.name)
-                    cc(device.address)
+                    cc(device.address + "|" + device.name)
 
                     if (device.address == TARGET_MAC) {
                         startClassicBT(device)
@@ -128,197 +319,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun startBLE() {
-        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
-        if (ActivityCompat.checkSelfPermission(
-                this, Manifest.permission.BLUETOOTH_ADMIN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            val fuck = arrayOf(
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.BLUETOOTH_CONNECT
-            )
-            requestPermissions(fuck, 100)
-            Log.wtf("[CCMETA]", "checkSelfPermission BLUETOOTH_SCAN failed 118")
-            return
-        }
-        Log.wtf("[CCMETA]", "bluetoothLeScanner.startScan(mScanCallback)")
-        bluetoothLeScanner.startScan(mScanCallback) // 開始搜尋
-//        Log.wtf("[CCMETA]", "bluetoothLeScanner.stopScan(mScanCallback)")
-//        bluetoothLeScanner.stopScan(mScanCallback) // 停止搜尋
-    }
-
-    // BLE MODE CALLBACK
-    private val mScanCallback = object : ScanCallback() {
-        override fun onScanFailed(errorCode: Int) {
-            super.onScanFailed(errorCode)
-            Log.wtf("[CCMETA]", "onScanFailed")
-        }
-
-        @RequiresApi(Build.VERSION_CODES.S)
-        override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            super.onScanResult(callbackType, result)
-            if (ActivityCompat.checkSelfPermission(
-                    context, Manifest.permission.BLUETOOTH_ADMIN
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                val fuck = arrayOf(
-                    Manifest.permission.BLUETOOTH,
-                    Manifest.permission.BLUETOOTH_ADMIN,
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                )
-                requestPermissions(fuck, 100)
-                Log.wtf("[CCMETA]", "checkSelfPermission BLUETOOTH_CONNECT failed 149")
-                return
-            }
-            val device = result?.device
-//            Log.wtf("[CCMETA]", "$deviceName")
-            if (device?.name != null && device.name.isNotEmpty()) {
-//                mLeDeviceListAdapter!!.addDevice(result.device!!)
-//                mLeDeviceListAdapter!!.notifyDataSetChanged()
-
-//                Log.wtf("[CCMETA] ScanResult ", "$result")
-//                Log.wtf("[CCMETA] device.address ", device.address)
-//                Log.wtf("[CCMETA] device.name", device.name)
-                if (TARGET_MAC != result.device.address) return
-                if (!result.isConnectable) {
-                    Log.wtf("[CCMETA] isConnectable", result.isConnectable.toString())
-                    return
-                }
-
-
-                // CLASSIC CONNECT MODE DIFF WITH GATT
-//                startClassicBT(device)
-//                return
-
-
-                // GATT CONNECT MODE DIFF WITH CLASSIC
-                if (bluetoothGatt != null) {
-                    bluetoothGatt!!.disconnect()
-                    bluetoothGatt!!.close()
-                    bluetoothGatt = null
-                }
-                bluetoothGatt =
-                    device.connectGatt(context, true, object : BluetoothGattCallback() {
-
-                        override fun onConnectionStateChange(
-                            gatt: BluetoothGatt, status: Int, newState: Int
-                        ) {
-                            super.onConnectionStateChange(gatt, status, newState)
-                            Log.wtf(
-                                "[CCMETA] status", status.toString()
-                            )
-                            Log.wtf(
-                                "[CCMETA] newState", newState.toString()
-                            )
-                            lifecycleScope.launch {
-                                withContext(Dispatchers.Main) {
-                                    HomeViewModel.setConnectDeviceInfo(
-                                        gatt.device.address,
-                                        newState.toString()
-                                    )
-                                }
-                            }
-                        }
-
-                        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                            Log.wtf(
-                                "[CCMETA] onServicesDiscovered", "onServicesDiscovered "
-                            )
-                            super.onServicesDiscovered(gatt, status)
-                            val bluetoothGattService = gatt.getService(UUID_Service)
-                            val bluetoothGattCharacteristic =
-                                bluetoothGattService.getCharacteristic(UUID_Characteristic)
-                            val bluetoothGattDescriptor =
-                                bluetoothGattCharacteristic.getDescriptor(UUID_Descriptor)
-                            if (ActivityCompat.checkSelfPermission(
-                                    context, Manifest.permission.BLUETOOTH_CONNECT
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                Log.wtf(
-                                    "[CCMETA] checkSelfPermission",
-                                    "checkSelfPermission failed L148"
-                                )
-                                return
-                            }
-                            gatt.setCharacteristicNotification(bluetoothGattCharacteristic, true)
-                            bluetoothGattDescriptor.value =
-                                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                            gatt.writeDescriptor(bluetoothGattDescriptor)
-                        }
-
-                        override fun onDescriptorWrite(
-                            gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int
-                        ) {
-                            Log.wtf(
-                                "[CCMETA] onDescriptorWrite", "onDescriptorWrite "
-                            )
-                            super.onDescriptorWrite(gatt, descriptor, status)
-                            val bluetoothGattService = gatt?.getService(UUID_Service)
-                            val bluetoothGattCharacteristic =
-                                bluetoothGattService?.getCharacteristic(UUID_Characteristic)
-                            bluetoothGattCharacteristic?.value = byteArrayOf(
-                                0xA1.toByte(),
-                                0x2E.toByte(),
-                                0x38.toByte(),
-                                0xD4.toByte(),
-                                0x89.toByte(),
-                                0xC3.toByte()
-                            )
-                            if (ActivityCompat.checkSelfPermission(
-                                    context, Manifest.permission.BLUETOOTH_CONNECT
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                Log.wtf(
-                                    "[CCMETA] checkSelfPermission",
-                                    "checkSelfPermission failed L185"
-                                )
-                                return
-                            }
-                            gatt?.writeCharacteristic(bluetoothGattCharacteristic)
-                        }
-                    }, TRANSPORT_LE) // THIS IS MUST NOT AUTO, FIX THE STATUS=133 ON 230324
-                Log.wtf("[CCMETA]", "finish a new connection.")
-            }
-        }
-    }
-
-    //CLASSIC MODE PROPERTIES
-    companion object {
-//        var myUUID: UUID = UUID.fromString("00007400-0000-1000-8000-00805f9b34fb")
-
-        var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-        var mBluetoothSocket: BluetoothSocket? = null
-        var isBlueConnected: Boolean = false
-        const val MESSAGE_RECEIVE_TAG = 111
-        private val BUNDLE_RECEIVE_DATA = "ReceiveData"
-        private val TAG = "BlueDeviceActivity"
-
-        //设置发送和接收的字符编码格式
-        private val ENCODING_FORMAT = "GBK"
-    }
-
+    // CLASSIC MODE FUNCTION
     private fun startClassicBT(device: BluetoothDevice) {
         thread {
-            if (ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_ADMIN
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Log.wtf("[CCMETA]", "checkSelfPermission BLUETOOTH_SCAN 301")
-                return@thread
-            }
+            checkSelfPermission()
             bluetoothAdapter.cancelDiscovery()
 
-            if (mBluetoothSocket != null && isBlueConnected)
-                finish()
+            if (mBluetoothSocket != null && isBlueConnected) finish()
 
             Log.wtf("[CCMETA]", "startClassicBT thread")
 
@@ -345,9 +352,7 @@ class MainActivity : AppCompatActivity() {
                     lifecycleScope.launch {
                         withContext(Dispatchers.Main) {
                             HomeViewModel.setConnectDeviceInfo(
-                                device.address,
-                                socket.isConnected.toString(),
-                                mode = "CLASSIC"
+                                device.address, socket.isConnected.toString(), mode = "CLASSIC"
                             )
                         }
                     }
@@ -366,7 +371,6 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-
                     lifecycleScope.launch {
                         withContext(Dispatchers.Main) {
                             HomeViewModel.selectedItem.observe(this@MainActivity) { item: String ->
@@ -378,7 +382,6 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-
                     // while for read socket buffer from bluetooth device
                     while (socket.isConnected) {
 
@@ -388,8 +391,9 @@ class MainActivity : AppCompatActivity() {
                             cc("Input stream was disconnected at inputStream.read")
                             return@thread
                         }
-                        val readText = bufferRead.filter { byte -> byte.toInt() != 0x00 }
-                            .toByteArray().decodeToString()
+                        val readText =
+                            bufferRead.filter { byte -> byte.toInt() != 0x00 }.toByteArray()
+                                .decodeToString()
                         cc("socket readText = $readText")
                         lifecycleScope.launch {
                             withContext(Dispatchers.Main) {
@@ -413,10 +417,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // LOG TOOL
     private fun cc(text: String?) {
         Log.wtf("[CCMETA]", text)
     }
 
+    // PERMISSION
+    private fun checkSelfPermission() {
+        if (ActivityCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH_ADMIN
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            cc("checkSelfPermission BLUETOOTH_ADMIN failed")
+            return
+        }
+    }
 }
 
 

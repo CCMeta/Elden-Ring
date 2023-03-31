@@ -34,6 +34,7 @@ int appdemo_init_cb(u8_t ble_init);
 void app_talk_start(void);
 void app_talk_end(void);
 // sagereal 20230327 by ccmeta Begin
+int app_cmd_check_off_sagereal(u8_t *data);
 void app_context_init_sagereal(void);
 int app_cmd_send_sagereal(void);
 // sagereal 20230327 by ccmeta End
