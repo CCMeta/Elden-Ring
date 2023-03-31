@@ -45,8 +45,8 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         // IF MODE IS CHANGED, EDIT THIS !!!!!
-//        private var BT_MODE = "BLE"
-        private var BT_MODE = "CLASSIC"
+        private var BT_MODE = "BLE"
+//        private var BT_MODE = "CLASSIC"
 
 
         // TARGET
