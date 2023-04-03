@@ -1,14 +1,11 @@
 package com.sagereal.elderring.ui.home
 
-import android.annotation.SuppressLint
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.ViewModelProvider
 import com.sagereal.elderring.databinding.FragmentHomeBinding
 
 class HomeFragment : Fragment() {
@@ -27,40 +24,45 @@ class HomeFragment : Fragment() {
         val root: View = binding.root
         binding.vm = homeViewModel
 
-        val textState131 = binding.textState131
-        homeViewModel.textState131.observe(viewLifecycleOwner) {
-            textState131.text = it
+        val textMessage = binding.textMessage
+        homeViewModel.textMessage.observe(viewLifecycleOwner) {
+            textMessage.text = it
         }
-        val textState110 = binding.textState110
-        homeViewModel.textState110.observe(viewLifecycleOwner) {
-            textState110.text = it
-        }
+
         val textMac = binding.textMac
         homeViewModel.textMac.observe(viewLifecycleOwner) {
             textMac.text = it
+        }
+        val textMode = binding.textMode
+        homeViewModel.textMode.observe(viewLifecycleOwner) {
+            textMode.text = it
         }
         val textState = binding.textState
         homeViewModel.textState.observe(viewLifecycleOwner) {
             textState.text = it
         }
 
-        val buttonSendOff: Button = binding.buttonSendOff
 
+        val buttonSendOff: Button = binding.buttonSendOff
+        homeViewModel.buttonSendOffEnableState.observe(viewLifecycleOwner) {
+            buttonSendOff.isEnabled = it
+        }
         buttonSendOff.setOnClickListener {
-            onClickButtonSendOff(binding)
+            HomeViewModel.signalCallOff.postValue("OFF")
         }
 
-        return root
-    }
+        val connectBle = binding.connectBle
+        connectBle.setOnClickListener {
+            homeViewModel.signalCallConnect.postValue("BLE")
+        }
 
-    @SuppressLint("SetTextI18n")
-    private fun onClickButtonSendOff(binding: FragmentHomeBinding) {
-        //send off to bluetooth
-        val homeViewModel = HomeViewModel
-        Log.wtf("[CCMETA]", "onClickButtonSendOff")
-        homeViewModel.selectItem("OFF")
-//        binding.textState110.text = "" + homeViewModel.textState110.value + "some 110 msg"
-//        binding.textState131.text = "" + homeViewModel.textState131.value + "some 131 msg"
+        val connectBr = binding.connectBr
+        connectBr.setOnClickListener {
+            homeViewModel.signalCallConnect.postValue("CLASSIC")
+        }
+
+
+        return root
     }
 
     override fun onDestroyView() {

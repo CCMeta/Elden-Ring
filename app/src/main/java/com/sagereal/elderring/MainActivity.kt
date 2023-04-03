@@ -94,6 +94,7 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_PRIVILEGED,
         )
         requestPermissions(permissions, 100)
         checkSelfPermission()
@@ -101,13 +102,23 @@ class MainActivity : AppCompatActivity() {
         bluetoothManager = this.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
 
-        if (BT_MODE == "BLE") {
-            // BLE MODE
-            startBLE()
-        } else {
-            // CLASSIC MODE
-            registerReceiver(receiverBR, IntentFilter(BluetoothDevice.ACTION_FOUND))
-            bluetoothAdapter.startDiscovery()
+        lifecycleScope.launch {
+            withContext(Dispatchers.Main) {
+                HomeViewModel.signalCallConnect.observe(this@MainActivity) { mode ->
+                    when (mode) {
+                        "BLE" -> {
+                            // BLE MODE
+                            startBLE()
+                        }
+                        "CLASSIC" -> {
+                            // CLASSIC MODE
+                            registerReceiver(receiverBR, IntentFilter(BluetoothDevice.ACTION_FOUND))
+                            bluetoothAdapter.startDiscovery()
+                        }
+                        else -> {}
+                    }
+                }
+            }
         }
     }
 
@@ -149,13 +160,12 @@ class MainActivity : AppCompatActivity() {
 
         @RequiresApi(Build.VERSION_CODES.S)
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            super.onScanResult(callbackType, result)
             checkSelfPermission()
-
+            super.onScanResult(callbackType, result)
             val device = result?.device
             if (device?.name != null && device.name.isNotEmpty()) {
 
-//                cc(device.address + "|" + device.name)
+                cc("BLE MODE:" + device.address + "|" + device.name)
 
                 if (TARGET_MAC != device.address) return
                 if (!result.isConnectable) {
@@ -192,7 +202,8 @@ class MainActivity : AppCompatActivity() {
                             withContext(Dispatchers.Main) {
                                 HomeViewModel.setConnectDeviceInfo(
                                     gatt.device.address,
-                                    (newState == BluetoothProfile.STATE_CONNECTED).toString()
+                                    (newState == BluetoothProfile.STATE_CONNECTED).toString(),
+                                    BT_MODE,
                                 )
                             }
                         }
@@ -230,7 +241,7 @@ class MainActivity : AppCompatActivity() {
                                 0x0C -> {
                                     lifecycleScope.launch {
                                         withContext(Dispatchers.Main) {
-                                            HomeViewModel.selectedItem.observe(this@MainActivity) { item: String ->
+                                            HomeViewModel.signalCallOff.observe(this@MainActivity) { item: String ->
                                                 if (item == "OFF") {
                                                     i.value = "OFF\n".toByteArray()
                                                     gatt.writeCharacteristic(i)
@@ -276,7 +287,7 @@ class MainActivity : AppCompatActivity() {
                         val readText = characteristic?.value?.decodeToString() ?: ""
                         lifecycleScope.launch {
                             withContext(Dispatchers.Main) {
-                                HomeViewModel.setConnectState(readText)
+                                HomeViewModel.setReceiveMessage(readText)
                             }
                         }
                     }
@@ -309,7 +320,7 @@ class MainActivity : AppCompatActivity() {
                     checkSelfPermission()
                     val device: BluetoothDevice =
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
-                    cc(device.address + "|" + device.name)
+                    cc("CLASSIC MODE:" + device.address + "|" + device.name)
 
                     if (device.address == TARGET_MAC) {
                         startClassicBT(device)
@@ -373,7 +384,7 @@ class MainActivity : AppCompatActivity() {
 
                     lifecycleScope.launch {
                         withContext(Dispatchers.Main) {
-                            HomeViewModel.selectedItem.observe(this@MainActivity) { item: String ->
+                            HomeViewModel.signalCallOff.observe(this@MainActivity) { item: String ->
                                 if (item == "OFF") {
                                     sendToRemote()
                                     cc("sendToRemote")
@@ -397,18 +408,9 @@ class MainActivity : AppCompatActivity() {
                         cc("socket readText = $readText")
                         lifecycleScope.launch {
                             withContext(Dispatchers.Main) {
-                                HomeViewModel.setConnectState(readText)
+                                HomeViewModel.setReceiveMessage(readText)
                             }
                         }
-
-//                        try {
-//                            cc("mmOutStream.write(bytes)|" + bufferWrite.size.toString())
-//                            outputStream.write(bufferWrite)
-//                        } catch (e: Exception) {
-//                            cc(e.toString())
-//                            return@thread
-//                        }
-//
                     }
                     cc("SOCKET DISCONNECTED")
                 }
@@ -433,18 +435,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
