@@ -51,14 +51,21 @@ class HomeFragment : Fragment() {
             HomeViewModel.signalCallOff.postValue("OFF")
         }
 
-        val connectBle = binding.connectBle
+        val connectBle: Button = binding.connectBle
         connectBle.setOnClickListener {
             homeViewModel.signalCallConnect.postValue("BLE")
+            homeViewModel.buttonConnectsEnableState.postValue(false)
         }
 
-        val connectBr = binding.connectBr
+        val connectBr: Button = binding.connectBr
         connectBr.setOnClickListener {
             homeViewModel.signalCallConnect.postValue("CLASSIC")
+            homeViewModel.buttonConnectsEnableState.postValue(false)
+        }
+
+        homeViewModel.buttonConnectsEnableState.observe(viewLifecycleOwner) {
+            connectBr.isEnabled = it
+            connectBle.isEnabled = it
         }
 
 

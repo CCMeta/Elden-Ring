@@ -13,7 +13,7 @@
 
     <string name="hello_first_fragment">Hello first fragment</string>
     <string name="hello_second_fragment">Hello second fragment. Arg: %1$s</string>
-    <string name="call_ble">CALL BLE</string>
+    <string name="call_ble">CALL LE</string>
     <string name="call_br">CALL BR</string>
-    <string name="text_notice_usage">*Click BLE OR BR to start Connect to BT device</string>
+    <string name="text_notice_usage">* Click BLE OR BR to start Connect to BT device</string>
 </resources>

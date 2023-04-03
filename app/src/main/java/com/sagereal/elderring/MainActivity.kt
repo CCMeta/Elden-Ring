@@ -45,7 +45,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         // IF MODE IS CHANGED, EDIT THIS !!!!!
-        private var BT_MODE = "BLE"
+        private var BT_MODE = ""
 //        private var BT_MODE = "CLASSIC"
 
 
@@ -63,7 +63,6 @@ class MainActivity : AppCompatActivity() {
         // CLASSIC
         var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         var mBluetoothSocket: BluetoothSocket? = null
-        var isBlueConnected: Boolean = false
         private const val SCAN_PERIOD: Long = 6000000
     }
 
@@ -101,11 +100,18 @@ class MainActivity : AppCompatActivity() {
 
         bluetoothManager = this.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
+        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
 
         lifecycleScope.launch {
             withContext(Dispatchers.Main) {
                 HomeViewModel.signalCallConnect.observe(this@MainActivity) { mode ->
-                    when (mode) {
+                    BT_MODE = mode
+                    bluetoothLeScanner.stopScan(leScanCallback)
+                    bluetoothGatt?.disconnect()
+                    bluetoothGatt?.close()
+                    bluetoothGatt = null
+                    mBluetoothSocket?.close()
+                    when (BT_MODE) {
                         "BLE" -> {
                             // BLE MODE
                             startBLE()
@@ -125,30 +131,32 @@ class MainActivity : AppCompatActivity() {
     // BLE MODE FUNCTION
     @RequiresApi(Build.VERSION_CODES.S)
     private fun startBLE() {
-        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
         checkSelfPermission()
         Log.wtf("[CCMETA]", "bluetoothLeScanner.startScan(mScanCallback)")
 
-        if (!scanning) { // Stops scanning after a pre-defined scan period.
-            handler.postDelayed({
-                scanning = false
-                bluetoothLeScanner.stopScan(leScanCallback)
-                cc("bluetoothLeScanner.stopScan(leScanCallback)")
-            }, SCAN_PERIOD)
-            scanning = true
-            bluetoothLeScanner.startScan(leScanCallback)
-        } else {
-            scanning = false
-            bluetoothLeScanner.stopScan(leScanCallback)
-        }
+//        if (!scanning) { // Stops scanning after a pre-defined scan period.
+//            handler.postDelayed({
+//                scanning = false
+//                bluetoothLeScanner.stopScan(leScanCallback)
+//                _log("bluetoothLeScanner.stopScan(leScanCallback)")
+//            }, SCAN_PERIOD)
+//            scanning = true
+//            bluetoothLeScanner.startScan(leScanCallback)
+//        } else {
+//            scanning = false
+//            bluetoothLeScanner.stopScan(leScanCallback)
+//        }
+        bluetoothLeScanner.startScan(leScanCallback)
 
-        //clock
+
+        //clock for console
         thread {
             while (false) {
                 Thread.sleep(1000)
-                cc("System.nanoTime:" + System.nanoTime().toString())
+                _log("System.nanoTime:" + System.nanoTime().toString())
             }
         }
+
     }
 
     // BLE MODE CALLBACK
@@ -165,7 +173,7 @@ class MainActivity : AppCompatActivity() {
             val device = result?.device
             if (device?.name != null && device.name.isNotEmpty()) {
 
-                cc("BLE MODE:" + device.address + "|" + device.name)
+                _log("BLE MODE:" + device.address + "|" + device.name)
 
                 if (TARGET_MAC != device.address) return
                 if (!result.isConnectable) {
@@ -174,10 +182,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // GATT CONNECT MODE DIFF WITH CLASSIC
-                if (bluetoothGatt != null) {
-                    bluetoothGatt!!.disconnect()
-                    bluetoothGatt!!.close()
-                    bluetoothGatt = null
+                if (bluetoothGatt != null && bluetoothGatt!!.device.address == device.address) {
+                    return
                 }
 
                 bluetoothGatt = device.connectGatt(context, true, object : BluetoothGattCallback() {
@@ -186,14 +192,13 @@ class MainActivity : AppCompatActivity() {
                         gatt: BluetoothGatt, status: Int, newState: Int
                     ) {
                         super.onConnectionStateChange(gatt, status, newState)
-                        cc("onConnectionStateChange status:" + status.toString())
-                        cc("onConnectionStateChange newState:" + newState.toString())
+                        _log("onConnectionStateChange status:" + status.toString())
+                        _log("onConnectionStateChange newState:" + newState.toString())
                         checkSelfPermission()
-
 
 //                        bluetoothAdapter.getRemoteDevice(device.address)
                         if (!gatt.discoverServices()) {
-                            cc("gatt.discoverServices is failed")
+                            _log("gatt.discoverServices is failed")
                             return
                         }
 
@@ -202,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                             withContext(Dispatchers.Main) {
                                 HomeViewModel.setConnectDeviceInfo(
                                     gatt.device.address,
-                                    (newState == BluetoothProfile.STATE_CONNECTED).toString(),
+                                    (newState == BluetoothProfile.STATE_CONNECTED),
                                     BT_MODE,
                                 )
                             }
@@ -210,27 +215,27 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                        cc("[CCMETA] onServicesDiscovered ")
+                        _log("[CCMETA] onServicesDiscovered ")
                         super.onServicesDiscovered(gatt, status)
-                        cc("gatt.services size " + gatt.services.size)
+                        _log("gatt.services size " + gatt.services.size)
                         for (i in gatt.services.indices) {
-                            cc("service No.$i :" + gatt.services[i].uuid.toString())
+                            _log("service No.$i :" + gatt.services[i].uuid.toString())
                         }
 
                         val service = gatt.getService(gatt.services[0].uuid)
                         checkSelfPermission()
 
-                        cc("characteristics.size:" + service.characteristics.size)
+                        _log("characteristics.size:" + service.characteristics.size)
                         service.characteristics.forEach { i ->
                             // fuck this place  properties always 20
                             i.uuid.leastSignificantBits
-                            cc("characteristic uuid:" + i.uuid.toString())
-                            cc("characteristic properties:" + i.properties.toString())
-                            cc("characteristic permissions:" + i.permissions.toString())
-                            cc("characteristic writeType:" + i.writeType.toString())
+                            _log("characteristic uuid:" + i.uuid.toString())
+                            _log("characteristic properties:" + i.properties.toString())
+                            _log("characteristic permissions:" + i.permissions.toString())
+                            _log("characteristic writeType:" + i.writeType.toString())
                             when (i.properties) {
                                 0x92 -> {
-                                    cc("gatt.readCharacteristic i.uuid:" + i.uuid.toString())
+                                    _log("gatt.readCharacteristic i.uuid:" + i.uuid.toString())
                                     gatt.setCharacteristicNotification(i, true)
                                     i.descriptors.forEach { descriptor ->
                                         descriptor.value =
@@ -259,14 +264,14 @@ class MainActivity : AppCompatActivity() {
                         characteristic: BluetoothGattCharacteristic?,
                         status: Int
                     ) {
-                        cc("onCharacteristicRead:")
+                        _log("onCharacteristicRead:")
                         super.onCharacteristicRead(gatt, characteristic, status)
                         if (status == BluetoothGatt.GATT_SUCCESS) {
-                            cc("onCharacteristicRead characteristic uuid:" + characteristic?.uuid.toString())
-                            cc("onCharacteristicRead characteristic?.value.size:" + characteristic?.value?.size)
-                            cc("onCharacteristicRead characteristic?.value:" + characteristic?.value?.decodeToString())
+                            _log("onCharacteristicRead characteristic uuid:" + characteristic?.uuid.toString())
+                            _log("onCharacteristicRead characteristic?.value.size:" + characteristic?.value?.size)
+                            _log("onCharacteristicRead characteristic?.value:" + characteristic?.value?.decodeToString())
                         } else {
-                            cc("status:" + status.toString())
+                            _log("status:" + status.toString())
                         }
                     }
 
@@ -275,14 +280,14 @@ class MainActivity : AppCompatActivity() {
                         characteristic: BluetoothGattCharacteristic?,
                         status: Int
                     ) {
-                        cc("onCharacteristicWrite")
+                        _log("onCharacteristicWrite")
                         super.onCharacteristicWrite(gatt, characteristic, status)
                     }
 
                     override fun onCharacteristicChanged(
                         gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?
                     ) {
-                        cc("onCharacteristicChanged")
+                        _log("onCharacteristicChanged")
                         super.onCharacteristicChanged(gatt, characteristic)
                         val readText = characteristic?.value?.decodeToString() ?: ""
                         lifecycleScope.launch {
@@ -296,18 +301,18 @@ class MainActivity : AppCompatActivity() {
                         gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int
                     ) {
                         super.onDescriptorRead(gatt, descriptor, status)
-                        cc("onDescriptorRead")
+                        _log("onDescriptorRead")
                     }
 
                     override fun onDescriptorWrite(
                         gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int
                     ) {
-                        cc("onDescriptorWrite ")
+                        _log("onDescriptorWrite ")
                         super.onDescriptorWrite(gatt, descriptor, status)
                     }
 
                 }, TRANSPORT_LE) // THIS IS MUST NOT AUTO, FIX THE STATUS=133 ON 230324
-                cc("bluetoothGatt?.device?.bondState:" + bluetoothGatt?.device?.bondState.toString())
+                _log("bluetoothGatt?.device?.bondState:" + bluetoothGatt?.device?.bondState.toString())
             }
         }
     }
@@ -320,7 +325,7 @@ class MainActivity : AppCompatActivity() {
                     checkSelfPermission()
                     val device: BluetoothDevice =
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
-                    cc("CLASSIC MODE:" + device.address + "|" + device.name)
+                    _log("CLASSIC MODE:" + device.address + "|" + device.name)
 
                     if (device.address == TARGET_MAC) {
                         startClassicBT(device)
@@ -336,48 +341,47 @@ class MainActivity : AppCompatActivity() {
             checkSelfPermission()
             bluetoothAdapter.cancelDiscovery()
 
-            if (mBluetoothSocket != null && isBlueConnected) finish()
-
             Log.wtf("[CCMETA]", "startClassicBT thread")
 
             val uuids = device.uuids
             var uuidsString = ""
             if (uuids != null) {
                 for (uuid in uuids) {
-                    cc(uuid.toString())
+                    _log(uuid.toString())
                     uuidsString += "$uuid "
                 }
             }
-            val mBluetoothSocket: BluetoothSocket by lazy(LazyThreadSafetyMode.NONE) {
+            val localBluetoothSocket: BluetoothSocket by lazy(LazyThreadSafetyMode.NONE) {
                 device.createRfcommSocketToServiceRecord(myUUID)
             }
-            Log.wtf("[CCMETA] isConnected", mBluetoothSocket.isConnected.toString())
-            if (!mBluetoothSocket.isConnected) {
-                cc("mBluetoothSocket.use { socket -> socket.connect() }")
-                mBluetoothSocket.use { socket ->
+            mBluetoothSocket = localBluetoothSocket
+            Log.wtf("[CCMETA] isConnected", localBluetoothSocket.isConnected.toString())
+            if (!localBluetoothSocket.isConnected) {
+                _log("mBluetoothSocket.use { socket -> socket.connect() }")
+                localBluetoothSocket.use { socket ->
                     socket.connect()
                     if (!socket.isConnected) {
-                        cc("socket is fucked:337")
+                        _log("socket is fucked:337")
                         return@thread
                     }
                     lifecycleScope.launch {
                         withContext(Dispatchers.Main) {
                             HomeViewModel.setConnectDeviceInfo(
-                                device.address, socket.isConnected.toString(), mode = "CLASSIC"
+                                device.address, socket.isConnected, mode = "CLASSIC"
                             )
                         }
                     }
-                    val outputStream = mBluetoothSocket.outputStream
-                    val inputStream = mBluetoothSocket.inputStream
+                    val outputStream = localBluetoothSocket.outputStream
+                    val inputStream = localBluetoothSocket.inputStream
                     val bufferRead = ByteArray(128)
-                    val bufferWrite = "OFF\n".toByteArray()
+                    val textOff = "OFF\n"
 
-                    fun sendToRemote(): Boolean {
+                    fun writeOutputStream(text: String): Boolean {
                         return try {
-                            outputStream.write(bufferWrite)
+                            outputStream.write(text.toByteArray())
                             true
                         } catch (e: Exception) {
-                            cc("Input stream was disconnected at outputStream.write")
+                            _log("Input stream was disconnected at outputStream.write")
                             false
                         }
                     }
@@ -386,8 +390,8 @@ class MainActivity : AppCompatActivity() {
                         withContext(Dispatchers.Main) {
                             HomeViewModel.signalCallOff.observe(this@MainActivity) { item: String ->
                                 if (item == "OFF") {
-                                    sendToRemote()
-                                    cc("sendToRemote")
+                                    writeOutputStream(textOff)
+                                    _log("sendToRemote")
                                 }
                             }
                         }
@@ -395,24 +399,33 @@ class MainActivity : AppCompatActivity() {
 
                     // while for read socket buffer from bluetooth device
                     while (socket.isConnected) {
-
                         try {
                             inputStream.read(bufferRead)
                         } catch (e: Exception) {
-                            cc("Input stream was disconnected at inputStream.read")
-                            return@thread
+                            _log("Input stream was disconnected at inputStream.read")
+                            break
                         }
                         val readText =
                             bufferRead.filter { byte -> byte.toInt() != 0x00 }.toByteArray()
                                 .decodeToString()
-                        cc("socket readText = $readText")
+                        _log("socket readText = $readText")
                         lifecycleScope.launch {
                             withContext(Dispatchers.Main) {
                                 HomeViewModel.setReceiveMessage(readText)
                             }
                         }
                     }
-                    cc("SOCKET DISCONNECTED")
+                    if (!socket.isConnected) {
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.Main) {
+                                HomeViewModel.setConnectDeviceInfo(
+                                    "NONE", socket.isConnected, "NONE"
+                                )
+                            }
+                        }
+                        mBluetoothSocket = null
+                        _log("SOCKET DISCONNECTED")
+                    }
                 }
             }
 
@@ -420,7 +433,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // LOG TOOL
-    private fun cc(text: String?) {
+    private fun _log(text: String?) {
         Log.wtf("[CCMETA]", text)
     }
 
@@ -430,7 +443,7 @@ class MainActivity : AppCompatActivity() {
                 this, Manifest.permission.BLUETOOTH_ADMIN
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            cc("checkSelfPermission BLUETOOTH_ADMIN failed")
+            _log("checkSelfPermission BLUETOOTH_ADMIN failed")
             return
         }
     }
