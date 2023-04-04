@@ -50,8 +50,8 @@ class MainActivity : AppCompatActivity() {
 
 
         // TARGET
-        private const val TARGET_MAC: String = "00:1D:29:B7:7B:FB" // DORO3500
-//        private const val TARGET_MAC: String = "F4:4E:FC:00:00:11" // CB01 US301B PUBLIC
+//        private const val TARGET_MAC: String = "00:1D:29:B7:7B:FB" // DORO3500
+        private const val TARGET_MAC: String = "F4:4E:FC:00:00:01" // CB01 US301B PUBLIC
 //        private val TARGET_MAC: String = "CB:4E:FC:00:00:01" // CB01 US301B STATIC
 //        private val TARGET_MAC: String = "0C:AE:B0:AC:D9:74" // EDIFIER BLE
 //        private val TARGET_MAC: String = "AC:90:85:0B:77:C2" // AIRPODS
