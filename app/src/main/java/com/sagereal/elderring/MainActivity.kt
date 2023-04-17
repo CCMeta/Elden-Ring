@@ -50,10 +50,10 @@ class MainActivity : AppCompatActivity() {
 
 
         // TARGET
-//        private const val TARGET_MAC: String = "00:1D:29:B7:7B:FB" // DORO3500
-        private const val TARGET_MAC: String = "F4:4E:FC:00:00:01" // CB01 US301B PUBLIC
+        private const val TARGET_MAC: String = "00:1D:29:B7:7B:FB" // DORO 3500
+//        private const val TARGET_MAC: String = "F4:4E:FC:00:00:01" // CB01 US301B PUBLIC
 //        private val TARGET_MAC: String = "CB:4E:FC:00:00:01" // CB01 US301B STATIC
-//        private val TARGET_MAC: String = "0C:AE:B0:AC:D9:74" // EDIFIER BLE
+//        private val TARGET_MAC: String = "0C:AE:B0:AC:D97:74" // EDIFIER BLE
 //        private val TARGET_MAC: String = "AC:90:85:0B:77:C2" // AIRPODS
 //        private val TARGET_MAC: String = "BC:1D:89:11:57:B8" // MOTO X30
 
@@ -62,9 +62,11 @@ class MainActivity : AppCompatActivity() {
         private val handler = Handler()
 
         // CLASSIC
+//        var myUUID: UUID = UUID.fromString("00001801-0000-1000-8000-00805F9B34FB")
         var myUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         var mBluetoothSocket: BluetoothSocket? = null
         private const val SCAN_PERIOD: Long = 6000000
+        private var is_connecting = false
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -228,7 +230,7 @@ class MainActivity : AppCompatActivity() {
 
                         _log("characteristics.size:" + service.characteristics.size)
                         service.characteristics.forEach { i ->
-                            // fuck this place  properties always 20
+                            // fuck.log this place  properties always 20
                             i.uuid.leastSignificantBits
                             _log("characteristic uuid:" + i.uuid.toString())
                             _log("characteristic properties:" + i.properties.toString())
@@ -328,8 +330,10 @@ class MainActivity : AppCompatActivity() {
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
                     _log("CLASSIC MODE:" + device.address + "|" + device.name)
 
-                    if (device.address == TARGET_MAC) {
+                    if (device.address == TARGET_MAC && !is_connecting) {
+                        is_connecting = true
                         startClassicBT(device)
+                        is_connecting = false
                     }
                 }
             }
@@ -351,8 +355,8 @@ class MainActivity : AppCompatActivity() {
                     _log(uuid.toString())
                     uuidsString += "$uuid "
                 }
-                lifecycleScope.launch{
-                    withContext(Dispatchers.Main){
+                lifecycleScope.launch {
+                    withContext(Dispatchers.Main) {
                         HomeViewModel.textMessage.postValue(uuidsString)
                     }
                 }
@@ -363,11 +367,11 @@ class MainActivity : AppCompatActivity() {
             mBluetoothSocket = localBluetoothSocket
             Log.wtf("[CCMETA] isConnected", localBluetoothSocket.isConnected.toString())
             if (!localBluetoothSocket.isConnected) {
-                _log("mBluetoothSocket.use { socket -> socket.connect() }")
+                _log("localBluetoothSocket.use { socket -> socket.connect() }")
                 localBluetoothSocket.use { socket ->
                     socket.connect()
                     if (!socket.isConnected) {
-                        _log("socket is fucked:337")
+                        _log("socket is fucked:370")
                         return@thread
                     }
                     lifecycleScope.launch {
@@ -411,6 +415,8 @@ class MainActivity : AppCompatActivity() {
                             _log("Input stream was disconnected at inputStream.read")
                             break
                         }
+                        _log(bufferRead.asList().toString())
+                        _log(bufferRead.filter { byte -> byte.toInt() != 0x00 }.size.toString())
                         val readText =
                             bufferRead.filter { byte -> byte.toInt() != 0x00 }.toByteArray()
                                 .decodeToString()
